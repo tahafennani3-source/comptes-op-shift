@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>Comptes OP par shift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+[hidden]{display:none!important}
+*{box-sizing:border-box}body{margin:0}
+/* Layout: bandeau de pilotage (jour + effectif par shift) puis registre des comptes, fiches QR en bas */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --fg:#17201c; --muted:#5d6b64; --line:#d8dfdb;
+  --accent:#0b6e4f; --accent-soft:#e1f0ea;
+  --sA:#b5651d; --sB:#1f5fa8; --sC:#6b3fa0;
+  --warn:#b42318;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --panel:#17201c; --fg:#e6ece9; --muted:#93a39b; --line:#2a3631;
+  --accent:#3fbf8f; --accent-soft:#18322a; --sA:#e09a55; --sB:#6aa5ec; --sC:#b38be0; --warn:#f97066; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --panel:#17201c; --fg:#e6ece9; --muted:#93a39b; --line:#2a3631;
+  --accent:#3fbf8f; --accent-soft:#18322a; --sA:#e09a55; --sB:#6aa5ec; --sC:#b38be0; --warn:#f97066; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;
+  padding-left:16px;padding-right:16px;padding-block:20px 40px}
+.wrap{max-width:1100px;margin:0 auto;display:grid;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-size:2.1rem;letter-spacing:.01em;margin:0;line-height:1;text-wrap:balance}
+.sub{color:var(--muted);margin-top:4px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted);font-family:var(--f-mono)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.live.on .dot{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:7px 11px;font:inherit;color:var(--fg);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.shifts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.shift{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--c);border-radius:6px;padding:12px 14px;display:grid;gap:6px}
+.shift h3{margin:0;font-family:var(--f-display);font-size:1.3rem;display:flex;justify-content:space-between;align-items:baseline}
+.shift h3 small{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);font-weight:500}
+.big{font-family:var(--f-display);font-size:2.2rem;line-height:1;font-variant-numeric:tabular-nums}
+.split{display:flex;gap:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.split b{color:var(--fg)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.card-h{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card-h h2{margin:0;font-family:var(--f-display);font-size:1.35rem}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:760px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+tr.off td{opacity:.5}
+input,select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:6px 8px;min-width:0}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+td input{width:100%}
+.mono{font-family:var(--f-mono)}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:600;color:#fff;background:var(--c)}
+.btn{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:5px;padding:7px 12px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{border-color:transparent;color:var(--warn);padding:5px 8px}
+.add{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1.4fr auto;gap:8px;padding:12px 14px;border-top:1px solid var(--line)}
+@media (max-width:760px){.add{grid-template-columns:1fr 1fr}}
+.empty{padding:28px 14px;color:var(--muted);text-align:center}
+.fiches{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;padding:14px}
+.fiche{border:1px dashed var(--line);border-radius:6px;padding:12px;display:grid;gap:6px;justify-items:center;text-align:center;background:#fff;color:#17201c}
+.fiche .qr{width:128px;height:128px}
+.fiche .qr img,.fiche .qr canvas{width:128px!important;height:128px!important}
+.fiche b{font-size:.95rem}
+.fiche .mono{font-size:.85rem}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.85rem}
+.note{font-size:.8rem;color:var(--muted)}
+
+@media print{body{background:#fff}.wrap>*:not(#fichesCard){display:none!important}#fichesCard{border:0}.card-h .btn{display:none}.fiche{break-inside:avoid}}
+</style>
+</head><body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Comptes OP par shift</h1>
+      <div class="sub">Comptes WMS des opérateurs · affectation PICK / PACK · jours OFF</div>
+    </div>
+    <div class="bar"><button class="btn" id="tokBtn" type="button">Jeton GitHub</button><span class="live" id="live"><span class="dot"></span><span id="liveTxt">Connexion…</span></span></div>
+  </header>
+  <form class="card" id="tokForm" hidden style="padding:12px 14px;display:grid;gap:8px">
+    <b>Jeton GitHub pour modifier</b>
+    <span class="note">Fine-grained token, droit <span class="mono">Contents: Read and write</span> sur ce dépôt uniquement. Il reste dans ce navigateur, jamais dans le dépôt.</span>
+    <div class="bar"><input id="tokIn" type="password" placeholder="github_pat_…" style="flex:1;min-width:200px" autocomplete="off"><button class="btn primary">Enregistrer</button><button class="btn" type="button" id="tokDel">Effacer</button></div>
+  </form>
+
+  <div class="bar">
+    <span class="label">Jour</span>
+    <div class="seg" id="days"></div>
+    <span class="label" style="margin-left:8px">Shift</span>
+    <div class="seg" id="filt"></div>
+  </div>
+
+  <div class="shifts" id="shifts"></div>
+
+  <section class="card">
+    <div class="card-h">
+      <h2>Registre des comptes</h2>
+      <div class="bar">
+        <input id="q" placeholder="Rechercher nom, matricule, compte" aria-label="Rechercher">
+        <button class="btn" id="copyJson">Copier JSON</button>
+      </div>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Opérateur</th><th>Matricule</th><th>Shift</th><th>Jour OFF</th><th>Poste</th><th>Compte WMS</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div class="empty" id="empty">Aucun opérateur pour l'instant. Ajoute le premier avec le formulaire ci‑dessous.</div>
+    <form class="add" id="addForm">
+      <input id="fNom" placeholder="Nom et prénom" required>
+      <input id="fMat" placeholder="Matricule">
+      <select id="fShift"><option>A</option><option selected>B</option><option>C</option></select>
+      <select id="fOff"></select>
+      <select id="fPoste"><option>PICK</option><option>PACK</option></select>
+      <input id="fCompte" placeholder="Compte WMS (login)" class="mono">
+      <button class="btn primary" type="submit">Ajouter</button>
+    </form>
+    <div class="note" style="padding:0 14px 12px">Données stockées dans le dépôt GitHub (data/ops.json). Lecture publique, modification avec ton jeton GitHub. N'enregistre pas de mots de passe ici, seulement les identifiants.</div>
+  </section>
+
+  <section class="card" id="fichesCard">
+    <div class="card-h">
+      <h2>Fiches d'accès QR</h2>
+      <div class="bar"><span class="note" id="ficheInfo"></span><button class="btn" type="button" onclick="window.print()">Imprimer les fiches</button></div>
+    </div>
+    <div class="fiches" id="fiches"></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script>
+const DAYS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+const SHIFTS={A:{h:"09h–17h",c:"var(--sA)"},B:{h:"06h–14h",c:"var(--sB)"},C:{h:"14h–22h",c:"var(--sC)"}};
+let ops=[], db=true, day=(new Date().getDay()+6)%7, filt="Tous", q="";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200)}
+
+$("fOff").innerHTML='<option value="">Aucun</option>'+DAYS.map(d=>`<option>${d}</option>`).join("");
+function seg(el,items,cur,on){el.innerHTML=items.map(i=>`<button type="button" aria-pressed="${i===cur}">${i}</button>`).join("");
+  el.querySelectorAll("button").forEach((b,i)=>b.onclick=()=>on(items[i]))}
+
+function render(){
+  seg($("days"),DAYS,DAYS[day],d=>{day=DAYS.indexOf(d);render()});
+  seg($("filt"),["Tous","A","B","C"],filt,f=>{filt=f;render()});
+  const dn=DAYS[day];
+  $("shifts").innerHTML=Object.entries(SHIFTS).map(([k,s])=>{
+    const all=ops.filter(o=>o.shift===k), pres=all.filter(o=>o.off!==dn);
+    const pk=pres.filter(o=>o.poste==="PICK").length, pc=pres.length-pk;
+    return `<div class="shift" style="--c:${s.c}"><h3>Shift ${k}<small>${s.h}</small></h3>
+      <div class="big">${pres.length}<span style="font-size:1rem;color:var(--muted)"> / ${all.length} présents</span></div>
+      <div class="split"><span>PICK <b>${pk}</b></span><span>PACK <b>${pc}</b></span><span>OFF <b>${all.length-pres.length}</b></span></div></div>`}).join("");
+  const ql=q.toLowerCase();
+  const list=ops.filter(o=>(filt==="Tous"||o.shift===filt)&&(!ql||[o.nom,o.matricule,o.compte].some(v=>String(v||"").toLowerCase().includes(ql))))
+    .sort((a,b)=>(a.shift+a.nom).localeCompare(b.shift+b.nom));
+  $("empty").hidden=ops.length>0;
+  $("rows").innerHTML=list.map(o=>`<tr class="${o.off===dn?"off":""}" data-id="${esc(o.id)}">
+    <td><input data-f="nom" value="${esc(o.nom)}" aria-label="Nom"></td>
+    <td><input data-f="matricule" class="mono" value="${esc(o.matricule)}" aria-label="Matricule"></td>
+    <td><select data-f="shift" aria-label="Shift">${["A","B","C"].map(s=>`<option ${s===o.shift?"selected":""}>${s}</option>`).join("")}</select></td>
+    <td><select data-f="off" aria-label="Jour OFF"><option value="">Aucun</option>${DAYS.map(d=>`<option ${d===o.off?"selected":""}>${d}</option>`).join("")}</select></td>
+    <td><select data-f="poste" aria-label="Poste">${["PICK","PACK"].map(p=>`<option ${p===o.poste?"selected":""}>${p}</option>`).join("")}</select></td>
+    <td><input data-f="compte" class="mono" value="${esc(o.compte)}" aria-label="Compte WMS"></td>
+    <td><button class="btn ghost" data-del>Supprimer</button></td></tr>`).join("");
+  // fiches
+  const pres=list.filter(o=>o.off!==dn&&o.compte);
+  $("ficheInfo").textContent=`${pres.length} fiche(s) · ${dn} · ${filt==="Tous"?"tous shifts":"shift "+filt}`;
+  $("fiches").innerHTML=pres.length?pres.map((o,i)=>`<div class="fiche"><span class="pill" style="--c:${SHIFTS[o.shift].c}">Shift ${o.shift} · ${o.poste}</span>
+    <div class="qr" id="qr${i}"></div><b>${esc(o.nom)}</b><span class="mono">${esc(o.compte)}</span></div>`).join("")
+    :'<div class="empty" style="grid-column:1/-1">Aucune fiche : ajoute un compte WMS aux opérateurs présents ce jour.</div>';
+  if(window.QRCode) pres.forEach((o,i)=>new QRCode($("qr"+i),{text:o.compte,width:256,height:256,correctLevel:QRCode.CorrectLevel.M}));
+}
+
+$("rows").addEventListener("change",async e=>{
+  const f=e.target.dataset.f; if(!f) return;
+  const id=e.target.closest("tr").dataset.id; const v=e.target.value.trim();
+  const o=ops.find(x=>x.id===id); if(!o||o[f]===v) return;
+  o[f]=v; render();
+  try{await gs("updateOp",id,{[f]:v});toast("Enregistré")}catch(err){toast("Échec : "+err.message);load()}
+});
+$("rows").addEventListener("click",async e=>{
+  if(!e.target.hasAttribute("data-del")) return;
+  const tr=e.target.closest("tr"), id=tr.dataset.id;
+  if(e.target.dataset.armed!=="1"){e.target.dataset.armed="1";e.target.textContent="Confirmer ?";setTimeout(()=>{e.target.dataset.armed="";e.target.textContent="Supprimer"},3000);return}
+  ops=ops.filter(o=>o.id!==id); render();
+  try{await gs("deleteOp",id);toast("Supprimé")}catch(err){toast("Échec : "+err.message);load()}
+});
+$("q").addEventListener("input",e=>{q=e.target.value;render()});
+$("addForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const o={nom:$("fNom").value.trim(),matricule:$("fMat").value.trim(),shift:$("fShift").value,off:$("fOff").value,poste:$("fPoste").value,compte:$("fCompte").value.trim(),maj:new Date().toISOString()};
+  if(!o.nom) return;
+  try{await gs("addOp",o);e.target.reset();$("fShift").value="B";toast("Ajouté")}catch(err){toast("Échec : "+err.message)}
+});
+$("copyJson").addEventListener("click",()=>{
+  const json=JSON.stringify(ops.map(({id,...r})=>({id,...r})),null,2);
+  navigator.clipboard.writeText(json).then(()=>toast("JSON copié ("+ops.length+" OP)")).catch(()=>toast("Copie refusée par le navigateur"));
+});
+
+// ---- Stockage GitHub : data/ops.json ----
+const CFG=(()=>{const h=location.hostname, seg=location.pathname.split("/").filter(Boolean);
+  const gh=h.endsWith(".github.io");
+  return {owner:gh?h.split(".")[0]:"tahafennani3-source", repo:gh?(seg[0]||h):"comptes-op-shift", branch:"main", path:"data/ops.json"}})();
+let sha=null;
+const tok=()=>{try{return localStorage.getItem("gh_tok")||""}catch(_){return ""}};
+const API=`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents/${CFG.path}`;
+const b64d=t=>new TextDecoder().decode(Uint8Array.from(atob(t.replace(/\n/g,"")),c=>c.charCodeAt(0)));
+const b64e=t=>{const u=new TextEncoder().encode(t);let s="";u.forEach(c=>s+=String.fromCharCode(c));return btoa(s)};
+async function fetchData(){
+  if(tok()){
+    const r=await fetch(API+"?ref="+CFG.branch+"&t="+Date.now(),{headers:{Authorization:"Bearer "+tok(),Accept:"application/vnd.github+json"},cache:"no-store"});
+    if(!r.ok) throw new Error(r.status===401?"Jeton refusé":"GitHub "+r.status);
+    const j=await r.json(); sha=j.sha; return JSON.parse(b64d(j.content));
+  }
+  const r=await fetch("data/ops.json?t="+Date.now(),{cache:"no-store"});
+  if(!r.ok) throw new Error("Lecture "+r.status); return r.json();
+}
+async function commit(label,mutate){
+  if(!tok()){$("tokForm").hidden=false;throw new Error("Ajoute ton jeton GitHub pour modifier")}
+  for(let i=0;i<2;i++){
+    const d=await fetchData(); d.ops=d.ops||[]; mutate(d.ops); d.maj=new Date().toISOString();
+    const r=await fetch(API,{method:"PUT",headers:{Authorization:"Bearer "+tok(),Accept:"application/vnd.github+json"},
+      body:JSON.stringify({message:"OP: "+label,content:b64e(JSON.stringify(d,null,2)+"\n"),sha,branch:CFG.branch})});
+    if(r.ok){const j=await r.json();sha=j.content.sha;ops=d.ops;render();return}
+    if(r.status!==409&&r.status!==422) throw new Error(r.status===403||r.status===404?"Jeton sans droit d'écriture sur ce dépôt":"GitHub "+r.status);
+  }
+  throw new Error("Conflit, réessaie");
+}
+function gs(fn,...a){
+  if(fn==="addOp"){const o={...a[0],id:Math.random().toString(36).slice(2,10),maj:new Date().toISOString()};return commit("ajout "+o.nom,l=>l.push(o)).then(()=>o)}
+  if(fn==="updateOp"){const[id,ch]=a;return commit("maj "+id,l=>{const o=l.find(x=>x.id===id);if(!o)throw new Error("OP introuvable");Object.assign(o,ch,{maj:new Date().toISOString()})})}
+  if(fn==="deleteOp"){const[id]=a;return commit("suppr "+id,l=>{const i=l.findIndex(x=>x.id===id);if(i>=0)l.splice(i,1)})}
+  if(fn==="listOps") return fetchData().then(d=>d.ops||[]);
+}
+$("tokBtn").onclick=()=>{$("tokForm").hidden=!$("tokForm").hidden};
+$("tokForm").onsubmit=e=>{e.preventDefault();try{localStorage.setItem("gh_tok",$("tokIn").value.trim())}catch(_){};$("tokIn").value="";$("tokForm").hidden=true;toast("Jeton enregistré dans ce navigateur");load()};
+$("tokDel").onclick=()=>{try{localStorage.removeItem("gh_tok")}catch(_){};toast("Jeton effacé");$("tokForm").hidden=true};
+let busy=false;
+async function load(){
+  if(busy) return; busy=true;
+  try{
+    ops=await gs("listOps");
+    $("live").classList.add("on");$("liveTxt").textContent="En direct · "+ops.length+" OP · "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    if(!document.activeElement||!document.activeElement.closest("#rows,#addForm")) render();
+  }catch(err){$("live").classList.remove("on");$("liveTxt").textContent="Déconnecté"}
+  busy=false;
+}
+render();load();setInterval(()=>{if(!document.hidden)load()},tok()?20000:60000);
+</script>
+</body></html>
