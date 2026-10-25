@@ -9,9 +9,12 @@ const out = path.join('_site', 'api');
 
 const src = JSON.parse(fs.readFileSync('data/ops.json', 'utf8'));
 const ops = (src.ops || []).filter(o => o && o.id);
+const comptes = src.comptes || [];
+const aff = src.aff || {};
+const byId = new Map(ops.map(o => [o.id, o]));
 const now = new Date();
-const casa = new Date(now.toLocaleString('en-US', { timeZone: 'Africa/Casablanca' }));
-const today = JOURS[(casa.getDay() + 6) % 7];
+const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Casablanca' }).format(now); // AAAA-MM-JJ
+const jourDe = d => JOURS[(new Date(d + 'T12:00:00Z').getUTCDay() + 6) % 7];
 
 const write = (rel, obj) => {
   const f = path.join(out, rel);
@@ -19,30 +22,38 @@ const write = (rel, obj) => {
   fs.writeFileSync(f, JSON.stringify({ genere: now.toISOString(), ...obj }, null, 2));
 };
 
-function effectif(jour) {
-  const r = {};
+// Accès WMS d'une date : une ligne par OP présent du shift
+function acces(date, s) {
+  const b = (aff[date] || {})[s] || { a: {}, par: {} };
+  const parOp = {};
+  for (const [login, id] of Object.entries(b.a || {})) parOp[id] = login;
+  const j = jourDe(date);
+  return ops.filter(o => o.shift === s).map(o => ({
+    nom: o.nom, matricule: o.matricule, shift: s, jour_off: o.off || '',
+    present: o.off !== j, compte_wms: parOp[o.id] || '', attribue_par: parOp[o.id] ? (b.par || {})[parOp[o.id]] || '' : ''
+  }));
+}
+function jourComplet(date) {
+  const shifts = {};
   for (const s of Object.keys(SHIFTS)) {
-    const all = ops.filter(o => o.shift === s);
-    const pres = all.filter(o => o.off !== jour);
-    r[s] = {
-      horaire: SHIFTS[s], total: all.length, presents: pres.length, off: all.length - pres.length,
-      PICK: pres.filter(o => o.poste === 'PICK').length, PACK: pres.filter(o => o.poste === 'PACK').length
+    const l = acces(date, s), pres = l.filter(x => x.present);
+    shifts[s] = {
+      horaire: SHIFTS[s], effectif: l.length, presents: pres.length, off: l.length - pres.length,
+      equipes: pres.filter(x => x.compte_wms).length, sans_compte: pres.filter(x => !x.compte_wms).length,
+      comptes_libres: comptes.length - Object.keys(((aff[date] || {})[s] || {}).a || {}).length, data: l
     };
   }
-  return r;
+  return { date, jour: jourDe(date), shifts };
 }
 
-write('ops.json', { count: ops.length, data: ops });
-write('effectif.json', { jour: today, shifts: effectif(today) });
-for (const j of JOURS) write(`effectif/${j}.json`, { jour: j, shifts: effectif(j) });
-for (const s of Object.keys(SHIFTS)) {
-  const all = ops.filter(o => o.shift === s);
-  write(`shift/${s}.json`, { shift: s, horaire: SHIFTS[s], count: all.length, data: all });
-  const pres = all.filter(o => o.off !== today);
-  write(`presents/${s}.json`, { shift: s, jour: today, count: pres.length, data: pres });
-  for (const j of JOURS) {
-    const pj = all.filter(o => o.off !== j);
-    write(`presents/${j}/${s}.json`, { shift: s, jour: j, count: pj.length, data: pj });
-  }
+write('ops.json', { count: ops.length, data: ops.map(({ id, ...o }) => o) });
+write('comptes.json', { count: comptes.length, capacite_jour: comptes.length * 3, data: comptes });
+write('acces.json', jourComplet(today));                       // aujourd'hui, tous shifts
+for (const s of Object.keys(SHIFTS)) write(`acces/${s}.json`, { ...jourComplet(today).shifts[s], date: today, shift: s });
+const dates = Object.keys(aff).sort();
+for (const d of dates) {
+  write(`acces/${d}.json`, jourComplet(d));
+  for (const s of Object.keys(SHIFTS)) write(`acces/${d}/${s}.json`, { ...jourComplet(d).shifts[s], date: d, shift: s });
 }
-console.log(`API générée : ${ops.length} OP, jour ${today}`);
+write('dates.json', { count: dates.length, data: dates });
+console.log(`API générée : ${ops.length} OP, ${comptes.length} comptes, ${dates.length} dates, aujourd'hui ${today}`);
