@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><base target="_top">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comptes OP par shift</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+/* Layout : barre date + shift, KPI par shift, onglets Affectation / Opérateurs / Comptes WMS / Fiches */
+:root{
+  --bg:#f3f5f4; --panel:#ffffff; --fg:#17201c; --muted:#5d6b64; --line:#d8dfdb;
+  --accent:#0b6e4f; --accent-soft:#e1f0ea;
+  --sA:#b5651d; --sB:#1f5fa8; --sC:#6b3fa0; --warn:#b42318; --ok:#0b6e4f;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --panel:#17201c; --fg:#e6ece9; --muted:#93a39b; --line:#2a3631;
+  --accent:#3fbf8f; --accent-soft:#18322a; --sA:#e09a55; --sB:#6aa5ec; --sC:#b38be0; --warn:#f97066; --ok:#3fbf8f; color-scheme:dark}}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;padding:20px 16px 40px}
+.wrap{max-width:1150px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-size:2.1rem;margin:0;line-height:1}
+.sub{color:var(--muted);margin-top:4px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted);font-family:var(--f-mono)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.live.on .dot{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.live.sync .dot{background:var(--sA)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:7px 12px;font:inherit;color:var(--fg);cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.daylbl{font-family:var(--f-display);font-size:1.25rem}
+.shifts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.shift{background:var(--panel);border:1px solid var(--line);border-top:4px solid var(--c);border-radius:6px;padding:12px 14px;display:grid;gap:6px}
+.shift h3{margin:0;font-family:var(--f-display);font-size:1.3rem;display:flex;justify-content:space-between;align-items:baseline}
+.shift h3 small{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);font-weight:500}
+.big{font-family:var(--f-display);font-size:2rem;line-height:1;font-variant-numeric:tabular-nums}
+.big span{font-size:1rem;color:var(--muted)}
+.split{display:flex;flex-wrap:wrap;gap:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.split b{color:var(--fg)}
+.meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--c)}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{border:0;background:none;font:inherit;font-weight:600;color:var(--muted);padding:9px 14px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--fg);border-color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.card-h{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.card-h h2{margin:0;font-family:var(--f-display);font-size:1.35rem}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:720px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;background:var(--panel)}
+tr.off td{opacity:.45}
+input,select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:6px 8px;min-width:0}
+select.acc{min-width:150px;font-family:var(--f-mono)}
+select.acc.set{border-color:var(--ok);background:var(--accent-soft)}
+input:focus-visible,select:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+td input{width:100%}
+.mono{font-family:var(--f-mono)}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:600;color:#fff;background:var(--c)}
+.st{font-size:.78rem;font-weight:600}
+.st.p{color:var(--ok)} .st.o{color:var(--muted)}
+.btn{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:5px;padding:7px 12px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{border-color:transparent;color:var(--warn);padding:5px 8px}
+.empty{padding:28px 14px;color:var(--muted);text-align:center}
+.pad{padding:12px 14px;display:grid;gap:10px}
+.note{font-size:.8rem;color:var(--muted)}
+.drop{display:block;border:2px dashed var(--line);border-radius:6px;padding:18px;text-align:center;color:var(--muted);cursor:pointer}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--f-mono);font-size:.82rem;border:1px solid var(--line);border-radius:5px;padding:4px 6px 4px 9px;display:inline-flex;gap:6px;align-items:center;background:var(--bg)}
+.chip .u{display:inline-flex;gap:3px}
+.chip .u i{width:16px;height:16px;border-radius:3px;font-style:normal;font-size:.68rem;display:grid;place-items:center;color:#fff;background:var(--line)}
+.chip .u i.on{background:var(--c)}
+.chip button{border:0;background:none;color:var(--warn);cursor:pointer;font:inherit;padding:0 2px}
+.addop{grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;border-top:1px solid var(--line)}
+@media (max-width:720px){.addop{grid-template-columns:1fr 1fr}}
+.fiches{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;padding:14px}
+.fiche{border:1px dashed #b9c4be;border-radius:6px;padding:12px;display:grid;gap:5px;justify-items:center;text-align:center;background:#fff;color:#17201c}
+.fiche .qr{width:120px;height:120px}
+.fiche .qr img,.fiche .qr canvas{width:120px!important;height:120px!important}
+.fiche b{font-size:.95rem}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.85rem;z-index:20;max-width:90vw}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:720px){.grid2{grid-template-columns:1fr}}
+@media print{body{background:#fff;padding:0}.wrap>*:not(#tab-fiches){display:none!important}#tab-fiches{border:0;display:block!important}.card-h{display:none}.fiche{break-inside:avoid}}
+</style>
+</head><body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Comptes OP par shift</h1>
+      <div class="sub">Accès WMS : un compte sert à un seul OP par shift et se réutilise sur les shifts A, B et C</div>
+    </div>
+    <div class="bar">
+      <span class="note" id="me"></span>
+      <span class="live" id="live"><span class="dot"></span><span id="liveTxt">Connexion…</span></span>
+    </div>
+  </header>
+
+  <div class="card pad" id="denied" hidden style="border-color:var(--warn)">
+    <b>Accès refusé</b>
+    <span>Ton compte Google n'a pas encore accès au registre. Demande au responsable de partager le Google Sheet « Comptes OP par shift » (droit Éditeur) avec ton adresse Gmail, puis recharge la page.</span>
+  </div>
+
+  <div class="bar">
+    <span class="label">Date</span>
+    <input type="date" id="date" aria-label="Date">
+    <button class="btn" type="button" id="prev" aria-label="Jour précédent">‹</button>
+    <button class="btn" type="button" id="next" aria-label="Jour suivant">›</button>
+    <button class="btn" type="button" id="today">Aujourd'hui</button>
+    <span class="daylbl" id="dayLbl"></span>
+    <span class="label" style="margin-left:8px">Shift</span>
+    <div class="seg" id="filt"></div>
+  </div>
+
+  <div class="shifts" id="kpi"></div>
+
+  <nav class="tabs" id="tabs"></nav>
+
+  <section class="card" id="tab-aff">
+    <div class="card-h">
+      <h2 id="affTitle">Affectation des comptes</h2>
+      <div class="bar">
+        <input id="q" placeholder="Rechercher" aria-label="Rechercher" style="width:160px">
+        <button class="btn" id="copyPrev" type="button">Reprendre dernière affectation</button>
+        <button class="btn" id="auto" type="button">Auto‑attribuer</button>
+        <button class="btn" id="clearDay" type="button">Vider</button>
+        <button class="btn primary" id="exportAff" type="button">Export Excel</button>
+      </div>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Opérateur</th><th>Matricule</th><th>Shift</th><th>Jour OFF</th><th>Statut</th><th>Compte WMS</th><th>Attribué par</th></tr></thead>
+      <tbody id="affRows"></tbody>
+    </table></div>
+    <div class="empty" id="affEmpty">Aucun opérateur. Importe ta liste Excel dans l'onglet Opérateurs.</div>
+  </section>
+
+  <section class="card" id="tab-ops" hidden>
+    <div class="card-h">
+      <h2>Opérateurs (liste des roulants)</h2>
+      <div class="bar"><button class="btn" id="exportOps" type="button">Export Excel</button></div>
+    </div>
+    <div class="pad">
+      <label class="drop" id="dropOps">
+        <b>Importer un fichier Excel</b> (.xlsx, .xls, .csv) : glisse‑le ici ou clique<br>
+        <span class="note">Colonnes reconnues : Opérateur ou Nom (+ Prénom), Matricule, Shift, Jour OFF, Poste, Compte WMS</span>
+        <input type="file" id="fileOps" accept=".xlsx,.xls,.csv" hidden>
+      </label>
+      <div id="impPrev" hidden class="card pad" style="background:var(--bg)">
+        <div id="impTxt"></div>
+        <div class="bar">
+          <button class="btn primary" id="impReplace" type="button">Remplacer la liste</button>
+          <button class="btn" id="impMerge" type="button">Fusionner (par matricule)</button>
+          <button class="btn" id="impCancel" type="button">Annuler</button>
+        </div>
+      </div>
+    </div>
+    <div class="tbl"><table>
+      <thead><tr><th>Opérateur</th><th>Matricule</th><th>Shift</th><th>Jour OFF</th><th>Poste</th><th></th></tr></thead>
+      <tbody id="opsRows"></tbody>
+    </table></div>
+    <form class="pad addop" id="addOp">
+      <input id="fNom" placeholder="Nom et prénom" required>
+      <input id="fMat" placeholder="Matricule">
+      <select id="fShift"><option>A</option><option selected>B</option><option>C</option></select>
+      <select id="fOff"></select>
+      <select id="fPoste"><option>PICK</option><option>PACK</option></select>
+      <button class="btn primary">Ajouter</button>
+    </form>
+  </section>
+
+  <section class="card" id="tab-cpt" hidden>
+    <div class="card-h"><h2>Comptes WMS</h2><span class="note" id="cptInfo"></span></div>
+    <div class="pad grid2">
+      <div style="display:grid;gap:8px">
+        <span class="label">Ajouter des comptes (un par ligne)</span>
+        <textarea id="cptIn" rows="5" class="mono" placeholder="op.xd01&#10;op.xd02&#10;op.xd03"></textarea>
+        <div class="bar"><button class="btn primary" id="cptAdd" type="button">Ajouter</button>
+        <label class="btn">Importer Excel<input type="file" id="fileCpt" accept=".xlsx,.xls,.csv" hidden></label></div>
+      </div>
+      <div class="note">Chaque compte est attribué à <b>un seul OP par shift</b> pour une date donnée, et peut servir sur les 3 shifts. Les cases A / B / C montrent où il est utilisé à la date choisie. La liste déroulante d'affectation ne propose que les comptes libres sur le shift de l'OP.</div>
+    </div>
+    <div class="pad"><div class="chips" id="cptList"></div></div>
+  </section>
+
+  <section class="card" id="tab-fiches" hidden>
+    <div class="card-h"><h2>Fiches d'accès QR</h2>
+      <div class="bar"><span class="note" id="ficheInfo"></span><button class="btn primary" type="button" onclick="window.print()">Imprimer</button></div></div>
+    <div class="fiches" id="fiches"></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const JOURS=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+const JLONG=["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+const SH={A:{h:"09h–17h",c:"var(--sA)"},B:{h:"06h–14h",c:"var(--sB)"},C:{h:"14h–22h",c:"var(--sC)"}};
+const TABS=["aff","ops","cpt","fiches"];
+const KEEP_DAYS=90;
+let D={ops:[],comptes:[],aff:{}};
+let date=iso(new Date()), filt="Tous", q="", tab="aff";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ls={get:k=>{try{return localStorage.getItem(k)||""}catch(_){return""}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(_){}}};
+function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)}
+function jourDe(ds){return JOURS[(new Date(ds+"T12:00").getDay()+6)%7]}
+function addDays(ds,n){const d=new Date(ds+"T12:00");d.setDate(d.getDate()+n);return iso(d)}
+const fr=ds=>ds.split("-").reverse().join("/");
+function toast(t){const el=$("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2800)}
+const norm=s=>String(s??"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim();
+const uid=()=>Math.random().toString(36).slice(2,10);
+
+/* ---------- Affectations : aff[date][shift] = {a:{compte:opId}, par:{compte:nom}} ---------- */
+function blk(d,s){return D.aff[d]?.[s]}
+function compteDe(d,s,opId,data=D){const b=data.aff[d]?.[s];if(!b)return"";for(const[l,o] of Object.entries(b.a||{}))if(o===opId)return l;return""}
+function parDe(d,s,login){return blk(d,s)?.par?.[login]||""}
+const present=(o,d)=>o.off!==jourDe(d);
+function setAcc(data,d,s,opId,login,par){
+  data.aff[d]=data.aff[d]||{};const b=data.aff[d][s]=data.aff[d][s]||{a:{},par:{}};b.a=b.a||{};b.par=b.par||{};
+  for(const[l,o] of Object.entries(b.a)) if(o===opId){delete b.a[l];delete b.par[l]}
+  if(login){ if(b.a[login]&&b.a[login]!==opId) throw new Error(`${login} déjà pris sur le shift ${s}`); b.a[login]=opId; b.par[login]=par||"" }
+}
+function prune(data){const lim=addDays(iso(new Date()),-KEEP_DAYS);for(const d of Object.keys(data.aff))if(d<lim)delete data.aff[d]}
+
+/* ---------- Stockage Google Sheet (Apps Script) ---------- */
+const gs=(fn,...a)=>new Promise((res,rej)=>google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...a));
+let ME="";
+function shape(d){d=d||{};return{ops:d.ops||[],comptes:d.comptes||[],aff:d.aff||{}}}
+function absorb(r){D=shape(r);if(r&&r.me!==undefined){ME=r.me;$("me").textContent=ME?"Connecté : "+ME:""}}
+function denied(e){const m=String(e&&e.message||e);if(/ACCES_REFUSE|autoris|permission|access/i.test(m)){$("denied").hidden=false;setLive("","Accès refusé");return true}return false}
+/* Les modifs s'affichent tout de suite, puis partent groupées vers le Sheet */
+let queue=[],timer=null,saving=false;
+function mutate(label,fn,ops){
+  try{fn(D)}catch(e){toast(e.message);return false}
+  queue.push(...ops);render();
+  clearTimeout(timer);timer=setTimeout(flush,700);setLive("sync","Enregistrement…");return true;
+}
+async function flush(){
+  if(saving){clearTimeout(timer);timer=setTimeout(flush,500);return}
+  if(!queue.length)return;
+  saving=true;const batch=queue.splice(0);
+  try{const r=await gs("apply",batch);absorb(r);toast(r.errs&&r.errs.length?"Enregistré, avec conflits : "+r.errs.join(", "):"Enregistré")}
+  catch(e){if(!denied(e))toast("Échec : "+(e.message||e));saving=false;await load(true)}
+  saving=false;render();setLive("on","En direct · "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}));
+  if(queue.length){clearTimeout(timer);timer=setTimeout(flush,500)}
+}
+function setLive(c,t){$("live").className="live "+c;$("liveTxt").textContent=t}
+let busy=false;
+async function load(force){
+  if(busy||(!force&&(queue.length||saving)))return;busy=true;
+  try{absorb(await gs("getAll"));$("denied").hidden=true;setLive("on","En direct · "+D.ops.length+" OP · "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}));
+    const a=document.activeElement;if(force||!a||!a.closest("tbody,form,textarea"))render();}
+  catch(e){if(!denied(e))setLive("","Déconnecté : "+(e.message||e))}
+  busy=false;
+}
+
+/* ---------- Rendu ---------- */
+function seg(el,items,cur,on,lab){el.innerHTML=items.map(i=>`<button type="button" aria-pressed="${i===cur}">${lab?lab(i):i}</button>`).join("");el.querySelectorAll("button").forEach((b,k)=>b.onclick=()=>on(items[k]))}
+const shiftsVis=()=>filt==="Tous"?["A","B","C"]:[filt];
+function render(){
+  $("date").value=date;
+  const j=jourDe(date);$("dayLbl").textContent=JLONG[JOURS.indexOf(j)]+(date===iso(new Date())?" · aujourd'hui":"");
+  seg($("filt"),["Tous","A","B","C"],filt,f=>{filt=f;render()});
+  $("tabs").innerHTML=TABS.map(t=>`<button type="button" data-t="${t}" aria-selected="${t===tab}">${({aff:"Affectation",ops:"Opérateurs ("+D.ops.length+")",cpt:"Comptes WMS ("+D.comptes.length+")",fiches:"Fiches QR"})[t]}</button>`).join("");
+  for(const t of TABS)$("tab-"+t).hidden=t!==tab;
+  $("kpi").innerHTML=Object.entries(SH).map(([s,v])=>{
+    const all=D.ops.filter(o=>o.shift===s),pres=all.filter(o=>present(o,date));
+    const att=pres.filter(o=>compteDe(date,s,o.id)).length,libres=D.comptes.filter(c=>!blk(date,s)?.a?.[c]).length;
+    const pct=pres.length?Math.round(att/pres.length*100):0;
+    return`<div class="shift" style="--c:${v.c}"><h3>Shift ${s}<small>${v.h}</small></h3>
+      <div class="big">${att}<span> / ${pres.length} présents équipés</span></div>
+      <div class="meter"><i style="width:${pct}%"></i></div>
+      <div class="split"><span>Effectif <b>${all.length}</b></span><span>OFF <b>${all.length-pres.length}</b></span><span>Comptes libres <b>${libres}</b></span></div></div>`}).join("");
+  ({aff:renderAff,ops:renderOps,cpt:renderCpt,fiches:renderFiches})[tab]();
+}
+$("tabs").addEventListener("click",e=>{const t=e.target.closest("button")?.dataset.t;if(t){tab=t;render()}});
+function listVis(){const ql=norm(q);return D.ops.filter(o=>shiftsVis().includes(o.shift)&&(!ql||norm(o.nom+" "+o.matricule).includes(ql)))
+  .sort((a,b)=>(a.shift+(present(a,date)?0:1)+a.nom).localeCompare(b.shift+(present(b,date)?0:1)+b.nom))}
+function renderAff(){
+  $("affTitle").textContent="Affectation du "+fr(date);
+  const list=listVis();$("affEmpty").hidden=D.ops.length>0;
+  $("affRows").innerHTML=list.map(o=>{
+    const p=present(o,date),cur=compteDe(date,o.shift,o.id),used=blk(date,o.shift)?.a||{};
+    const opts=D.comptes.filter(c=>!used[c]||c===cur);
+    if(cur&&!opts.includes(cur))opts.unshift(cur);
+    return`<tr class="${p?"":"off"}" data-id="${esc(o.id)}" data-s="${o.shift}">
+      <td><b>${esc(o.nom)}</b></td><td class="mono">${esc(o.matricule)}</td>
+      <td><span class="pill" style="--c:${SH[o.shift].c}">${o.shift}</span></td><td>${esc(o.off||"—")}</td>
+      <td><span class="st ${p?"p":"o"}">${p?"Présent":"OFF"}</span></td>
+      <td><select class="acc ${cur?"set":""}" aria-label="Compte WMS de ${esc(o.nom)}" ${p?"":"disabled"}><option value="">— aucun —</option>${opts.map(c=>`<option ${c===cur?"selected":""}>${esc(c)}</option>`).join("")}</select></td>
+      <td class="note">${esc(cur?parDe(date,o.shift,cur):"")}</td></tr>`}).join("");
+}
+function renderOps(){
+  $("opsRows").innerHTML=D.ops.filter(o=>shiftsVis().includes(o.shift)).sort((a,b)=>(a.shift+a.nom).localeCompare(b.shift+b.nom)).map(o=>`<tr data-id="${esc(o.id)}">
+    <td><input data-f="nom" value="${esc(o.nom)}" aria-label="Nom"></td>
+    <td><input data-f="matricule" class="mono" value="${esc(o.matricule)}" aria-label="Matricule"></td>
+    <td><select data-f="shift" aria-label="Shift">${["A","B","C"].map(s=>`<option ${s===o.shift?"selected":""}>${s}</option>`).join("")}</select></td>
+    <td><select data-f="off" aria-label="Jour OFF"><option value="">Aucun</option>${JOURS.map(d=>`<option ${d===o.off?"selected":""}>${d}</option>`).join("")}</select></td>
+    <td><select data-f="poste" aria-label="Poste">${["PICK","PACK"].map(p=>`<option ${p===o.poste?"selected":""}>${p}</option>`).join("")}</select></td>
+    <td><button class="btn ghost" data-del type="button">Supprimer</button></td></tr>`).join("")||'<tr><td colspan="6" class="empty">Aucun opérateur.</td></tr>';
+}
+function renderCpt(){
+  const used=s=>blk(date,s)?.a||{};
+  const tot=D.comptes.length,full=D.comptes.filter(c=>["A","B","C"].every(s=>used(s)[c])).length;
+  $("cptInfo").textContent=`${tot} comptes · capacité ${tot*3} accès/jour · ${full} utilisés sur les 3 shifts le ${fr(date)}`;
+  $("cptList").innerHTML=D.comptes.map(c=>`<span class="chip">${esc(c)}<span class="u">${["A","B","C"].map(s=>`<i class="${used(s)[c]?"on":""}" style="--c:${SH[s].c}" title="Shift ${s}">${s}</i>`).join("")}</span><button type="button" data-c="${esc(c)}" aria-label="Supprimer ${esc(c)}">×</button></span>`).join("")||'<span class="note">Aucun compte. Ajoute la liste des comptes WMS ci‑dessus.</span>';
+}
+function renderFiches(){
+  const rows=[];for(const o of listVis()){const c=compteDe(date,o.shift,o.id);if(present(o,date)&&c)rows.push({o,c})}
+  $("ficheInfo").textContent=`${rows.length} fiche(s) · ${fr(date)} · ${filt==="Tous"?"tous shifts":"shift "+filt}`;
+  $("fiches").innerHTML=rows.length?rows.map((r,i)=>`<div class="fiche"><span class="pill" style="--c:${SH[r.o.shift].c}">Shift ${r.o.shift} · ${SH[r.o.shift].h}</span>
+    <div class="qr" id="qr${i}"></div><b>${esc(r.o.nom)}</b><span class="mono">${esc(r.c)}</span><span class="note">${esc(r.o.matricule)} · ${fr(date)}</span></div>`).join("")
+    :'<div class="empty" style="grid-column:1/-1">Aucun compte attribué pour cette date et ce shift.</div>';
+  if(window.QRCode)rows.forEach((r,i)=>new QRCode($("qr"+i),{text:r.c,width:240,height:240,correctLevel:QRCode.CorrectLevel.M}));
+}
+
+/* ---------- Affectation ---------- */
+$("affRows").addEventListener("change",e=>{
+  if(!e.target.classList.contains("acc"))return;
+  const tr=e.target.closest("tr"),id=tr.dataset.id,s=tr.dataset.s,login=e.target.value,par=ME,d=date;
+  const o=D.ops.find(x=>x.id===id);
+  if(!mutate("",x=>setAcc(x,d,s,id,login,par),[{type:"setAcc",d,s,opId:id,login}]))render();
+});
+function lastDateBefore(d){return Object.keys(D.aff).filter(x=>x<d&&["A","B","C"].some(s=>Object.keys(D.aff[x][s]?.a||{}).length)).sort().pop()}
+$("copyPrev").onclick=()=>{
+  const src=lastDateBefore(date);if(!src){toast("Aucune affectation antérieure");return}
+  const d=date,par=ME,plan=[];
+  for(const s of shiftsVis()){const b=blk(src,s);if(!b)continue;const used={...(blk(d,s)?.a||{})};
+    for(const[l,id] of Object.entries(b.a||{})){const o=D.ops.find(x=>x.id===id);
+      if(o&&o.shift===s&&present(o,d)&&!compteDe(d,s,id)&&!used[l]&&D.comptes.includes(l)){used[l]=id;plan.push([s,id,l])}}}
+  if(!plan.length){toast("Rien à reprendre du "+fr(src));return}
+  if(mutate("",x=>{for(const[s,id,l] of plan){try{setAcc(x,d,s,id,l,par)}catch(_){}}},plan.map(([s,id,l])=>({type:"setAcc",d,s,opId:id,login:l}))))
+    toast(plan.length+" comptes repris du "+fr(src));
+};
+$("auto").onclick=()=>{
+  if(!D.comptes.length){toast("Ajoute d'abord des comptes WMS");tab="cpt";render();return}
+  const d=date,par=ME,plan=[],src=lastDateBefore(d);let manque=0;
+  for(const s of shiftsVis()){
+    const used={...(blk(d,s)?.a||{})};
+    const sans=D.ops.filter(o=>o.shift===s&&present(o,d)&&!compteDe(d,s,o.id)).sort((a,b)=>a.nom.localeCompare(b.nom));
+    for(const o of sans){
+      let l=src?compteDe(src,s,o.id):"";
+      if(!l||used[l]||!D.comptes.includes(l))l=D.comptes.find(c=>!used[c]);
+      if(!l){manque++;continue}used[l]=o.id;plan.push([s,o.id,l]);
+    }
+  }
+  if(!plan.length){toast(manque?`Pool insuffisant : ${manque} OP sans compte`:"Tous les présents ont déjà un compte");return}
+  if(mutate("",x=>{for(const[s,id,l] of plan){try{setAcc(x,d,s,id,l,par)}catch(_){}}},plan.map(([s,id,l])=>({type:"setAcc",d,s,opId:id,login:l}))))
+    toast(`${plan.length} comptes attribués`+(manque?` · ${manque} OP sans compte (pool insuffisant)`:""));
+};
+$("clearDay").onclick=e=>{
+  const b=e.target;if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Confirmer : vider ?";setTimeout(()=>{b.dataset.armed="";b.textContent="Vider"},3000);return}
+  b.dataset.armed="";b.textContent="Vider";const d=date,ss=shiftsVis();
+  mutate("",x=>{if(x.aff[d])for(const s of ss)delete x.aff[d][s]},[{type:"clear",d,shifts:ss}]);
+};
+$("q").addEventListener("input",e=>{q=e.target.value;render()});
+
+/* ---------- Date libre ---------- */
+$("date").addEventListener("change",e=>{if(e.target.value){date=e.target.value;render()}});
+$("prev").onclick=()=>{date=addDays(date,-1);render()};
+$("next").onclick=()=>{date=addDays(date,1);render()};
+$("today").onclick=()=>{date=iso(new Date());render()};
+
+/* ---------- Opérateurs ---------- */
+$("fOff").innerHTML='<option value="">Jour OFF</option>'+JOURS.map(d=>`<option>${d}</option>`).join("");
+$("opsRows").addEventListener("change",e=>{
+  const f=e.target.dataset.f;if(!f)return;const id=e.target.closest("tr").dataset.id,v=e.target.value.trim();
+  mutate("",x=>{const o=x.ops.find(y=>y.id===id);if(o)o[f]=v},[{type:"opUpdate",id,f,v}]);
+});
+$("opsRows").addEventListener("click",e=>{
+  if(!e.target.hasAttribute("data-del"))return;const b=e.target,id=b.closest("tr").dataset.id;
+  if(b.dataset.armed!=="1"){b.dataset.armed="1";b.textContent="Confirmer ?";setTimeout(()=>{b.dataset.armed="";b.textContent="Supprimer"},3000);return}
+  mutate("",x=>{x.ops=x.ops.filter(o=>o.id!==id);for(const d in x.aff)for(const s in x.aff[d])for(const[l,o] of Object.entries(x.aff[d][s].a||{}))if(o===id)delete x.aff[d][s].a[l]},[{type:"opDelete",id}]);
+});
+$("addOp").addEventListener("submit",e=>{
+  e.preventDefault();const o={id:uid(),nom:$("fNom").value.trim(),matricule:$("fMat").value.trim(),shift:$("fShift").value,off:$("fOff").value,poste:$("fPoste").value};
+  if(!o.nom)return;if(mutate("",x=>x.ops.push(o),[{type:"opAdd",op:o}])){e.target.reset();$("fShift").value="B"}
+});
+
+/* ---------- Import Excel ---------- */
+const normShift=v=>{const s=norm(v).toUpperCase();if(/^[ABC]$/.test(s))return s;const m=s.match(/(?:^|[^A-Z])([ABC])(?:[^A-Z]|$)/);if(m)return m[1];
+  const h=parseInt(s,10);if(h>=5&&h<=7)return"B";if(h>=8&&h<=10)return"A";if(h>=13&&h<=15)return"C";return""};
+const normJour=v=>{const i=["lun","mar","mer","jeu","ven","sam","dim"].indexOf(norm(v).slice(0,3));return i<0?"":JOURS[i]};
+async function readSheet(file){
+  if(!window.XLSX)throw new Error("lecteur Excel non chargé (vérifie la connexion)");
+  const wb=XLSX.read(await file.arrayBuffer(),{type:"array"});
+  for(const n of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:"",raw:false});if(rows.filter(r=>r.some(c=>String(c).trim())).length>1)return rows}
+  return[];
+}
+function headerIdx(rows){for(let i=0;i<Math.min(10,rows.length);i++){const h=rows[i].map(norm);if(h.some(x=>/nom|operateur|matricule|login|compte/.test(x)))return i}return 0}
+let pending=null;
+async function importOps(file){
+  try{
+    const rows=await readSheet(file);if(!rows.length)throw new Error("fichier vide");
+    const hi=headerIdx(rows),H=rows[hi].map(norm),col=re=>H.findIndex(h=>re.test(h));
+    const cNom=col(/^(nom|operateur|collaborateur|agent|employe)/),cPre=col(/^prenom/),cMat=col(/matricule|^mat\b|^id\b/),
+      cSh=col(/shift|equipe|horaire/),cOff=col(/off|repos/),cPo=col(/^poste|activite/),cCpt=col(/compte|login|user|wms/);
+    if(cNom<0&&cMat<0)throw new Error("colonnes Opérateur / Matricule introuvables");
+    const ops=[],cpts=new Set();
+    for(const r of rows.slice(hi+1)){
+      const nom=[cNom>=0?r[cNom]:"",cPre>=0&&cPre!==cNom?r[cPre]:""].map(x=>String(x).trim()).filter(Boolean).join(" ");
+      const mat=cMat>=0?String(r[cMat]).trim():"";if(!nom&&!mat)continue;
+      const po=norm(cPo>=0?r[cPo]:"").toUpperCase();
+      ops.push({id:uid(),nom:nom||mat,matricule:mat,shift:normShift(cSh>=0?r[cSh]:"")||"B",off:normJour(cOff>=0?r[cOff]:""),poste:po.includes("PACK")?"PACK":"PICK"});
+      if(cCpt>=0&&String(r[cCpt]).trim())cpts.add(String(r[cCpt]).trim());
+    }
+    pending={ops,cpts:[...cpts]};
+    const by=s=>ops.filter(o=>o.shift===s).length;
+    $("impTxt").innerHTML=`<b>${esc(file.name)}</b> : ${ops.length} opérateurs lus (A ${by("A")} · B ${by("B")} · C ${by("C")}), ${ops.filter(o=>o.off).length} avec jour OFF`+(pending.cpts.length?`, ${pending.cpts.length} comptes WMS à ajouter`:"")+
+      `<br><span class="note">Colonnes utilisées : ${[cNom,cPre,cMat,cSh,cOff,cPo,cCpt].filter(i=>i>=0).map(i=>esc(rows[hi][i])).join(", ")}</span>`;
+    $("impPrev").hidden=false;
+  }catch(e){toast("Import impossible : "+e.message)}
+}
+function applyImport(mode){
+  if(!pending)return;const p=pending;pending=null;$("impPrev").hidden=true;
+  mutate("",x=>{
+    if(mode==="replace"){const old=new Map(x.ops.filter(o=>o.matricule).map(o=>[o.matricule,o.id]));x.ops=p.ops.map(o=>({...o,id:old.get(o.matricule)||o.id}))}
+    else for(const o of p.ops){const e=o.matricule&&x.ops.find(y=>y.matricule===o.matricule);if(e)Object.assign(e,{...o,id:e.id});else x.ops.push(o)}
+    for(const c of p.cpts)if(!x.comptes.includes(c))x.comptes.push(c);
+  },[{type:"import",mode,ops:p.ops,cpts:p.cpts}]);
+}
+$("impReplace").onclick=()=>applyImport("replace");
+$("impMerge").onclick=()=>applyImport("merge");
+$("impCancel").onclick=()=>{pending=null;$("impPrev").hidden=true};
+$("fileOps").onchange=e=>{const f=e.target.files[0];if(f)importOps(f);e.target.value=""};
+const dz=$("dropOps");
+dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("over")});
+dz.addEventListener("dragleave",()=>dz.classList.remove("over"));
+dz.addEventListener("drop",e=>{e.preventDefault();dz.classList.remove("over");const f=e.dataTransfer.files[0];if(f)importOps(f)});
+
+/* ---------- Comptes WMS ---------- */
+function addComptes(list){const n=[...new Set(list.map(s=>String(s).trim()).filter(Boolean))].filter(c=>!D.comptes.includes(c));
+  if(!n.length){toast("Aucun nouveau compte");return}
+  if(mutate("",x=>{for(const c of n)if(!x.comptes.includes(c))x.comptes.push(c)},[{type:"addComptes",list:n}])){$("cptIn").value="";toast(n.length+" comptes ajoutés")}}
+$("cptAdd").onclick=()=>addComptes($("cptIn").value.split(/[\n,;]+/));
+$("fileCpt").onchange=async e=>{const f=e.target.files[0];e.target.value="";if(!f)return;
+  try{const rows=await readSheet(f);const hi=headerIdx(rows),H=(rows[hi]||[]).map(norm);let c=H.findIndex(h=>/compte|login|user|wms/.test(h));
+    const start=c<0?0:hi+1;if(c<0)c=0;addComptes(rows.slice(start).map(r=>r[c]))}catch(err){toast("Import impossible : "+err.message)}};
+$("cptList").addEventListener("click",e=>{const c=e.target.dataset.c;if(c===undefined)return;
+  if(e.target.dataset.armed!=="1"){e.target.dataset.armed="1";e.target.textContent="?";setTimeout(()=>{e.target.dataset.armed="";e.target.textContent="×"},3000);return}
+  mutate("",x=>{x.comptes=x.comptes.filter(y=>y!==c)},[{type:"delCompte",c}])});
+
+/* ---------- Exports Excel ---------- */
+function xls(rows,name,sheet){if(!window.XLSX){toast("Lecteur Excel non chargé");return}
+  const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,sheet);XLSX.writeFile(wb,name)}
+$("exportAff").onclick=()=>xls(listVis().map(o=>{const c=compteDe(date,o.shift,o.id);return{"Date":fr(date),"Shift":o.shift,"Opérateur":o.nom,"Matricule":o.matricule,"Jour OFF":o.off,"Statut":present(o,date)?"Présent":"OFF","Compte WMS":c,"Attribué par":c?parDe(date,o.shift,c):""}}),`acces_wms_${date}.xlsx`,"Affectation");
+$("exportOps").onclick=()=>xls(D.ops.map(o=>({"Opérateur":o.nom,"Matricule":o.matricule,"Shift":o.shift,"Jour OFF":o.off,"Poste":o.poste})),"operateurs.xlsx","Opérateurs");
+
+window.addEventListener("beforeunload",e=>{if(queue.length||saving){e.preventDefault();e.returnValue=""}});
+
+render();load(true);setInterval(()=>{if(!document.hidden)load()},20000);
+</script>
+</body></html>
